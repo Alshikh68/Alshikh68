@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>شجرة العائلة</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --panel: #ffffff; --text: #2b2a27; --muted: #77736a;
+    --line: #c9c2b4; --accent: #2f6f5e; --male: #e3eef9; --female: #fbe7ef;
+    --hl: #ffe08a; --danger: #b3412f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1b1c1e; --panel: #26282b; --text: #ecebe7; --muted: #a29e95;
+      --line: #4a4d52; --accent: #5fb39c; --male: #22364a; --female: #4a2636;
+      --hl: #7a6420; --danger: #e0715f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Tahoma, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  h1 { margin: 0; font-size: 1.4rem; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, input, select { font: inherit; }
+  button { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.danger { color: var(--danger); }
+  main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 0 16px 16px; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  form label { display: block; margin-bottom: 10px; font-size: .9rem; color: var(--muted); }
+  form input, form select { display: block; width: 100%; margin-top: 4px; padding: 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  #search { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
+  .stats { color: var(--muted); font-size: .85rem; margin-top: 12px; }
+  #treeWrap { overflow: auto; min-height: 400px; }
+  .tree { direction: ltr; }
+  .node, .empty { direction: rtl; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+
+  /* شجرة بالـ CSS (التخطيط LTR والأبناء معكوسون ليظهر الأكبر على اليمين) */
+  .tree ul { padding-top: 20px; position: relative; display: flex; justify-content: center; padding-inline-start: 0; margin: 0; }
+  .tree li { list-style: none; text-align: center; position: relative; padding: 20px 6px 0; }
+  .tree li::before, .tree li::after { content: ""; position: absolute; top: 0; right: 50%; border-top: 2px solid var(--line); width: 50%; height: 20px; }
+  .tree li::after { right: auto; left: 50%; border-left: 2px solid var(--line); }
+  .tree li:only-child::after, .tree li:only-child::before { display: none; }
+  .tree li:only-child { padding-top: 0; }
+  .tree li:first-child::before, .tree li:last-child::after { border: 0 none; }
+  .tree li:last-child::before { border-right: 2px solid var(--line); border-radius: 0 6px 0 0; }
+  .tree li:first-child::after { border-radius: 6px 0 0 0; }
+  .tree ul ul::before { content: ""; position: absolute; top: 0; left: 50%; border-left: 2px solid var(--line); height: 20px; }
+  .tree > ul { padding-top: 0; }
+  .node { display: inline-block; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); cursor: pointer; min-width: 90px; white-space: nowrap; }
+  .node.m { background: var(--male); }
+  .node.f { background: var(--female); }
+  .node.sel { outline: 3px solid var(--accent); }
+  .node.hl { box-shadow: 0 0 0 4px var(--hl); }
+  .node .n { font-weight: 600; }
+  .node .d { font-size: .75rem; color: var(--muted); }
+  .node .s { font-size: .75rem; color: var(--muted); }
+  .toggle { font-size: .7rem; margin-inline-start: 4px; color: var(--accent); }
+  @media print { header .tools, aside { display: none; } main { display: block; } .panel { border: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌳 شجرة العائلة</h1>
+  <div class="tools">
+    <input id="search" type="search" placeholder="بحث عن اسم…">
+    <button id="exportBtn">تصدير JSON</button>
+    <button id="importBtn">استيراد JSON</button>
+    <input id="importFile" type="file" accept="application/json" hidden>
+    <button onclick="window.print()">طباعة</button>
+    <button id="clearBtn" class="danger">مسح الكل</button>
+  </div>
+</header>
+<main>
+  <aside class="panel">
+    <form id="form">
+      <h3 id="formTitle" style="margin-top:0">إضافة شخص</h3>
+      <label>الاسم <input id="name" required></label>
+      <div class="row">
+        <label>الجنس
+          <select id="gender"><option value="m">ذكر</option><option value="f">أنثى</option></select>
+        </label>
+        <label>الأب / الأم
+          <select id="parent"></select>
+        </label>
+      </div>
+      <div class="row">
+        <label>سنة الميلاد <input id="birth" inputmode="numeric"></label>
+        <label>سنة الوفاة <input id="death" inputmode="numeric"></label>
+      </div>
+      <label>الزوج / الزوجة <input id="spouse"></label>
+      <div class="actions">
+        <button type="submit" class="primary" id="saveBtn">إضافة</button>
+        <button type="button" id="childBtn" hidden>إضافة ابن/ابنة</button>
+        <button type="button" id="deleteBtn" class="danger" hidden>حذف</button>
+        <button type="button" id="cancelBtn" hidden>إلغاء</button>
+      </div>
+    </form>
+    <div class="stats" id="stats"></div>
+  </aside>
+  <section class="panel" id="treeWrap"><div class="tree" id="tree"></div></section>
+</main>
+
+<script>
+const KEY = "family-tree-v1";
+let people = [];
+let selected = null;
+const collapsed = new Set();
+const $ = id => document.getElementById(id);
+
+function load() {
+  try { people = JSON.parse(localStorage.getItem(KEY)) || []; } catch { people = []; }
+  if (!people.length) people = [
+    { id: "1", name: "الجد", gender: "m", parentId: "", birth: "1930", death: "2005", spouse: "الجدة" },
+    { id: "2", name: "الأب", gender: "m", parentId: "1", birth: "1960", death: "", spouse: "" },
+    { id: "3", name: "العمة", gender: "f", parentId: "1", birth: "1965", death: "", spouse: "" },
+    { id: "4", name: "الابن", gender: "m", parentId: "2", birth: "1990", death: "", spouse: "" }
+  ];
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(people)); } catch {} }
+const byId = id => people.find(p => p.id === id);
+const childrenOf = id => people.filter(p => (p.parentId || "") === id);
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+function descendants(id) {
+  const out = new Set([id]);
+  for (const c of childrenOf(id)) descendants(c.id).forEach(x => out.add(x));
+  return out;
+}
+
+function fillParents(excludeId) {
+  const banned = excludeId ? descendants(excludeId) : new Set();
+  const sel = $("parent");
+  sel.innerHTML = '<option value="">— بدون (جذر) —</option>' +
+    people.filter(p => !banned.has(p.id))
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"))
+      .map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+
+function renderNode(p, q) {
+  const kids = childrenOf(p.id);
+  const dates = p.birth || p.death ? `<div class="d">${esc(p.birth || "؟")}${p.death ? " – " + esc(p.death) : ""}</div>` : "";
+  const spouse = p.spouse ? `<div class="s">💍 ${esc(p.spouse)}</div>` : "";
+  const hl = q && p.name.includes(q) ? " hl" : "";
+  const toggle = kids.length ? `<span class="toggle" data-t="${p.id}">${collapsed.has(p.id) ? "▸ " + kids.length : "▾"}</span>` : "";
+  let html = `<li><div class="node ${p.gender}${p.id === selected ? " sel" : ""}${hl}" data-id="${p.id}">
+    <div class="n">${esc(p.name)}${toggle}</div>${dates}${spouse}</div>`;
+  if (kids.length && !collapsed.has(p.id)) html += `<ul>${kids.slice().reverse().map(k => renderNode(k, q)).join("")}</ul>`;
+  return html + "</li>";
+}
+
+function render() {
+  const q = $("search").value.trim();
+  const roots = people.filter(p => !p.parentId || !byId(p.parentId));
+  $("tree").innerHTML = roots.length
+    ? roots.map(r => `<ul>${renderNode(r, q)}</ul>`).join("")
+    : '<div class="empty">الشجرة فارغة — أضف أول شخص من النموذج.</div>';
+  const gens = Math.max(0, ...roots.map(function depth(p) { return 1 + Math.max(0, ...childrenOf(p.id).map(depth)); }));
+  $("stats").textContent = `عدد الأفراد: ${people.length} · الأجيال: ${gens}`;
+}
+
+function resetForm(parentId = "") {
+  selected = null;
+  $("form").reset();
+  fillParents();
+  $("parent").value = parentId;
+  $("formTitle").textContent = "إضافة شخص";
+  $("saveBtn").textContent = "إضافة";
+  ["childBtn", "deleteBtn", "cancelBtn"].forEach(b => $(b).hidden = true);
+  render();
+  $("name").focus();
+}
+
+function select(id) {
+  const p = byId(id); if (!p) return;
+  selected = id;
+  fillParents(id);
+  $("name").value = p.name; $("gender").value = p.gender; $("parent").value = p.parentId || "";
+  $("birth").value = p.birth || ""; $("death").value = p.death || ""; $("spouse").value = p.spouse || "";
+  $("formTitle").textContent = "تعديل: " + p.name;
+  $("saveBtn").textContent = "حفظ التعديل";
+  ["childBtn", "deleteBtn", "cancelBtn"].forEach(b => $(b).hidden = false);
+  render();
+}
+
+$("form").addEventListener("submit", e => {
+  e.preventDefault();
+  const data = {
+    name: $("name").value.trim(), gender: $("gender").value, parentId: $("parent").value,
+    birth: $("birth").value.trim(), death: $("death").value.trim(), spouse: $("spouse").value.trim()
+  };
+  if (!data.name) return;
+  if (selected) Object.assign(byId(selected), data);
+  else people.push({ id: newId(), ...data });
+  save();
+  if (selected) select(selected); else resetForm(data.parentId);
+});
+
+$("childBtn").onclick = () => resetForm(selected);
+$("cancelBtn").onclick = () => resetForm();
+$("deleteBtn").onclick = () => {
+  const p = byId(selected);
+  if (!confirm(`حذف "${p.name}"؟ سيُنقل أبناؤه إلى والده.`)) return;
+  childrenOf(p.id).forEach(c => c.parentId = p.parentId || "");
+  people = people.filter(x => x.id !== p.id);
+  save(); resetForm();
+};
+
+$("tree").addEventListener("click", e => {
+  const t = e.target.closest("[data-t]");
+  if (t) { const id = t.dataset.t; collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id); e.stopPropagation(); return render(); }
+  const n = e.target.closest(".node");
+  if (n) select(n.dataset.id);
+});
+
+$("search").addEventListener("input", render);
+
+$("exportBtn").onclick = () => {
+  const blob = new Blob([JSON.stringify(people, null, 2)], { type: "application/json" });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "family-tree.json" });
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$("importBtn").onclick = () => $("importFile").click();
+$("importFile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (!Array.isArray(data) || !data.every(p => p.id && p.name)) throw 0;
+    people = data; save(); resetForm();
+  } catch { alert("ملف غير صالح."); }
+  e.target.value = "";
+};
+$("clearBtn").onclick = () => { if (confirm("مسح الشجرة بالكامل؟")) { people = []; save(); resetForm(); } };
+
+load();
+resetForm();
+</script>
+</body>
+</html>
